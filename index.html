@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GI Service Line Dashboard FY26 — Temple Health</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --navy:#1F3864; --teal:#2E75B6; --teal-lt:#EBF3FB; --teal-mid:#BDD7EE;
+    --green:#375623; --green-lt:#E2EFDA;
+    --purple:#7030A0; --purple-lt:#EAE0F5;
+    --amber:#C55A11; --amber-lt:#FCE4D6;
+    --gray:#595959; --gray-lt:#F4F4F4; --gray-mid:#E0E0E0;
+    --white:#FFFFFF; --black:#1A1A1A;
+    --up:#217346; --dn:#C00000; --neu:#7F4F00;
+    --radius:10px; --shadow:0 2px 8px rgba(0,0,0,0.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,sans-serif;font-size:14px;background:#F0F2F5;color:var(--black)}
+  /* ── Layout ── */
+  .shell{max-width:1400px;margin:0 auto;padding:20px 24px}
+  /* ── Top bar ── */
+  .topbar{background:var(--navy);border-radius:var(--radius);padding:18px 24px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  .topbar-title{color:#fff}
+  .topbar-title h1{font-size:20px;font-weight:700;letter-spacing:.3px}
+  .topbar-title p{font-size:12px;opacity:.75;margin-top:3px}
+  .topbar-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  select,button{font-family:inherit;font-size:13px;padding:7px 14px;border-radius:6px;cursor:pointer;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);color:#fff;transition:background .15s}
+  select option{color:var(--black);background:#fff}
+  select:hover,button:hover{background:rgba(255,255,255,.22)}
+  button.active{background:rgba(255,255,255,.3);font-weight:600}
+  /* ── Tabs ── */
+  .tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+  .tab{padding:9px 20px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:500;background:var(--white);color:var(--gray);box-shadow:var(--shadow);transition:all .15s}
+  .tab:hover{background:var(--gray-lt)}
+  .tab.active{color:#fff}
+  .tab[data-tab="ops"].active{background:var(--teal)}
+  .tab[data-tab="fin"].active{background:var(--green)}
+  .tab[data-tab="qual"].active{background:var(--purple)}
+  /* ── Panes ── */
+  .pane{display:none}.pane.active{display:block}
+  /* ── KPI row ── */
+  .kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px}
+  .kpi{background:var(--white);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);border-top:4px solid var(--teal)}
+  .kpi.fin{border-top-color:var(--green)}
+  .kpi.qual{border-top-color:var(--purple)}
+  .kpi-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--gray);margin-bottom:6px}
+  .kpi-value{font-size:26px;font-weight:700;color:var(--black);line-height:1;margin-bottom:5px}
+  .kpi-sub{font-size:12px;color:var(--gray)}
+  .kpi-sub.up{color:var(--up)}.kpi-sub.dn{color:var(--dn)}.kpi-sub.neu{color:var(--neu)}
+  /* ── Chart grid ── */
+  .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+  .chart-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px}
+  .chart-full{margin-bottom:16px}
+  .card{background:var(--white);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow)}
+  .card-title{font-size:13px;font-weight:600;color:var(--black);margin-bottom:2px}
+  .card-sub{font-size:11px;color:var(--gray);margin-bottom:12px}
+  .legend{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px;font-size:11px;color:var(--gray)}
+  .li{display:flex;align-items:center;gap:5px}
+  .ls{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+  /* ── Table ── */
+  .tbl-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{background:var(--gray-lt);font-size:11px;font-weight:600;color:var(--gray);text-align:left;padding:8px 10px;border-bottom:2px solid var(--gray-mid);white-space:nowrap}
+  td{padding:7px 10px;border-bottom:1px solid var(--gray-mid);color:var(--black)}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#FAFBFC}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .pill{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px}
+  .pg{background:#E2EFDA;color:#375623}.pr{background:#FCE4D6;color:#C55A11}.pa{background:#FFF2CC;color:#7F6000}
+  /* ── Benchmark line label ── */
+  .bench-note{font-size:11px;color:var(--gray);font-style:italic;margin-top:6px}
+  /* ── Responsive ── */
+  @media(max-width:800px){
+    .chart-grid,.chart-grid-3{grid-template-columns:1fr}
+    .kpi-row{grid-template-columns:repeat(2,1fr)}
+  }
+  @media print{
+    body{background:#fff}
+    .topbar-controls,.tabs{display:none}
+    .pane{display:block!important}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<div class="topbar">
+  <div class="topbar-title">
+    <h1>GI Digestive Disease Service Line</h1>
+    <p>Temple Health &nbsp;·&nbsp; FY26 Performance Dashboard &nbsp;·&nbsp; Jul 2025 – May 2026</p>
+  </div>
+  <div class="topbar-controls">
+    <select id="campusSel" onchange="render()">
+      <option value="all">All Campuses</option>
+      <option value="TUH Main">TUH Main</option>
+      <option value="FCCC">FCCC</option>
+      <option value="Jeanes">Jeanes</option>
+      <option value="NEC">NEC</option>
+      <option value="CHH">CHH</option>
+    </select>
+    <button id="btn-mo" class="active" onclick="setView('monthly',this)">Monthly</button>
+    <button id="btn-ytd" onclick="setView('ytd',this)">YTD</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-tab="ops" onclick="switchTab('ops',this)">📊 Operational</button>
+  <button class="tab" data-tab="fin" onclick="switchTab('fin',this)">💰 Financial</button>
+  <button class="tab" data-tab="qual" onclick="switchTab('qual',this)">🏥 Quality</button>
+</div>
+
+<div id="pane-ops" class="pane active"></div>
+<div id="pane-fin" class="pane"></div>
+<div id="pane-qual" class="pane"></div>
+
+</div>
+
+<script>
+const MO = ['Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26','May-26'];
+const CAMPUSES = ['TUH Main','FCCC','Jeanes','NEC','CHH'];
+const CAMP_COLORS = {'TUH Main':'#2E75B6','FCCC':'#375623','Jeanes':'#7030A0','NEC':'#C55A11','CHH':'#833C00'};
+const CAMP_LIGHT  = {'TUH Main':'#BDD7EE','FCCC':'#C6EFCE','Jeanes':'#E4DCEF','NEC':'#FCE4D6','CHH':'#F4CCAA'};
+
+const D = {
+  ops:{
+    'TUH Main':{vol:[1131,1091,1088,1186,961,1032,1011,1139,1140,1144,1018],bud:[1078,1029,1029,1127,882,1029,1029,980,1078,1078,980],ip:[131,107,99,152,96,116,91,116,132,137,114],op:[816,762,765,804,655,758,706,781,811,824,744],fill:[.90,.933,.967,.922,.956,.933,.948,.995,.918,.909,.915],ns:[.19,.22,.24,.21,.23,.21,.22,.19,.20,.21,.20],fcots:[.82,.79,.81,.84,.78,.80,.83,.86,.85,.86,.84],delay:[14,17,15,12,18,16,14,11,13,12,13],turn:[28,30,29,27,32,29,28,26,27,26,27]},
+    'FCCC':    {vol:[408,467,445,465,410,407,395,374,453,471,317],bud:[408,458,487,476,369,384,454,395,426,466,418],ip:[0,0,0,0,0,0,0,0,0,0,0],op:[408,467,445,465,410,407,395,374,453,471,317],fill:[.81,.93,.88,.92,.81,.81,.78,.74,.90,.93,.63],ns:[.17,.19,.21,.18,.20,.18,.19,.17,.18,.19,.18],fcots:[.85,.82,.84,.86,.80,.83,.85,.87,.86,.88,.83],delay:[12,15,13,11,16,14,12,10,11,11,12],turn:[25,27,26,24,29,26,25,23,24,24,25]},
+    'Jeanes':  {vol:[109,141,125,133,106,142,114,122,131,131,139],bud:[125,119,119,130,102,119,119,113,125,125,113],ip:[55,50,45,42,35,16,41,45,179,42,62],op:[54,85,80,89,64,28,70,72,886,83,69],fill:[.50,.86,.71,.79,.63,.85,.95,1.0,.82,1.0,1.0],ns:[.22,.25,.27,.24,.26,.24,.25,.22,.23,.24,.23],fcots:[.76,.74,.77,.79,.72,.75,.77,.80,.79,.80,.77],delay:[18,21,19,16,22,19,17,15,16,16,17],turn:[31,34,32,30,36,33,31,29,30,30,31]},
+    'NEC':     {vol:[90,101,134,150,131,103,84,89,114,85,107],bud:[142,135,135,148,116,135,135,129,142,142,129],ip:[0,0,0,0,0,0,0,0,0,0,0],op:[90,101,134,150,131,103,84,89,114,85,107],fill:[.95,.90,.95,.87,.94,.95,.90,.95,.95,.86,.95],ns:[.21,.24,.26,.23,.25,.23,.24,.21,.22,.23,.22],fcots:[.79,.77,.80,.82,.75,.78,.80,.83,.82,.83,.80],delay:[16,19,17,14,20,17,15,13,14,14,15],turn:[29,31,30,28,33,30,29,27,28,27,28]},
+    'CHH':     {vol:[58,51,50,58,45,44,39,49,38,57,45],bud:[61,65,61,54,49,51,62,48,47,58,59],ip:[0,0,0,0,0,0,0,0,0,0,0],op:[58,51,50,58,45,44,39,49,38,57,45],fill:[.27,.33,.48,.78,.83,.52,.52,.70,.55,.82,.75],ns:[.16,.18,.20,.17,.19,.17,.18,.16,.17,.18,.17],fcots:[.80,.78,.81,.83,.76,.79,.81,.84,.83,.84,.81],delay:[14,17,15,12,18,15,13,11,12,12,13],turn:[27,29,28,26,31,28,27,25,26,26,27]}
+  },
+  fin:{
+    'TUH Main':{salA:[1.82,1.78,1.81,1.95,1.70,1.79,1.84,1.91,1.88,1.92,1.75],salB:[1.85,1.85,1.85,1.98,1.75,1.80,1.85,1.90,1.90,1.90,1.80],expA:[0.42,0.39,0.41,0.45,0.36,0.40,0.43,0.44,0.45,0.46,0.41],expB:[0.40,0.40,0.40,0.44,0.38,0.40,0.42,0.44,0.44,0.44,0.42],fte:{f:42,o:5,t:47},prod:[.87,.84,.88,.92,.82,.85,.88,.91,.90,.91,.88]},
+    'FCCC':    {salA:[0.95,0.98,0.96,1.02,0.91,0.94,0.97,0.99,1.01,1.03,0.96],salB:[0.98,0.98,0.98,1.02,0.93,0.96,0.98,1.00,1.01,1.02,0.98],expA:[0.22,0.21,0.23,0.24,0.20,0.21,0.23,0.24,0.24,0.25,0.22],expB:[0.22,0.22,0.22,0.24,0.21,0.22,0.23,0.24,0.24,0.24,0.23],fte:{f:21,o:2,t:23},prod:[.91,.93,.90,.96,.88,.91,.93,.95,.94,.95,.92]},
+    'Jeanes':  {salA:[0.31,0.33,0.32,0.34,0.29,0.31,0.32,0.33,0.34,0.34,0.32],salB:[0.32,0.32,0.32,0.34,0.30,0.32,0.33,0.33,0.34,0.34,0.33],expA:[0.08,0.07,0.08,0.09,0.07,0.08,0.08,0.09,0.09,0.09,0.08],expB:[0.08,0.08,0.08,0.09,0.07,0.08,0.08,0.09,0.09,0.09,0.08],fte:{f:8,o:1,t:9},prod:[.82,.88,.80,.86,.78,.84,.86,.88,.87,.88,.84]},
+    'NEC':     {salA:[0.28,0.29,0.28,0.30,0.26,0.27,0.29,0.30,0.30,0.31,0.29],salB:[0.29,0.29,0.29,0.31,0.27,0.28,0.29,0.30,0.30,0.30,0.29],expA:[0.07,0.07,0.07,0.08,0.06,0.07,0.07,0.08,0.08,0.08,0.07],expB:[0.07,0.07,0.07,0.08,0.07,0.07,0.07,0.08,0.08,0.08,0.08],fte:{f:7,o:2,t:9},prod:[.72,.75,.78,.80,.68,.71,.74,.78,.76,.77,.73]},
+    'CHH':     {salA:[0.18,0.19,0.18,0.20,0.17,0.18,0.19,0.19,0.20,0.20,0.18],salB:[0.19,0.19,0.19,0.20,0.18,0.18,0.19,0.20,0.20,0.20,0.19],expA:[0.05,0.05,0.05,0.06,0.04,0.05,0.05,0.06,0.06,0.06,0.05],expB:[0.05,0.05,0.05,0.06,0.05,0.05,0.05,0.06,0.06,0.06,0.05],fte:{f:5,o:1,t:6},prod:[.78,.80,.76,.82,.72,.76,.79,.82,.80,.81,.78]}
+  },
+  qual:{
+    'TUH Main':{cir:[.92,.91,.93,.94,.90,.92,.93,.95,.94,.95,.93],adr:[.28,.27,.29,.30,.26,.28,.29,.31,.30,.31,.29],readm:[.021,.023,.020,.019,.024,.022,.021,.018,.019,.018,.020]},
+    'FCCC':    {cir:[.88,.87,.89,.90,.86,.88,.89,.91,.90,.92,.89],adr:[.31,.30,.32,.33,.29,.31,.32,.34,.33,.34,.32],readm:[.018,.020,.017,.016,.021,.019,.018,.015,.016,.015,.017]},
+    'Jeanes':  {cir:[.85,.84,.86,.87,.83,.85,.86,.88,.87,.89,.86],adr:[.24,.23,.25,.26,.22,.24,.25,.27,.26,.27,.25],readm:[.025,.027,.024,.023,.028,.026,.025,.022,.023,.022,.024]},
+    'NEC':     {cir:[.83,.82,.84,.85,.81,.83,.84,.86,.85,.87,.84],adr:[.22,.21,.23,.24,.20,.22,.23,.25,.24,.25,.23],readm:[.028,.030,.027,.026,.031,.029,.028,.025,.026,.025,.027]},
+    'CHH':     {cir:[.87,.86,.88,.89,.85,.87,.88,.90,.89,.91,.88],adr:[.25,.24,.26,.27,.23,.25,.26,.28,.27,.28,.26],readm:[.023,.025,.022,.021,.026,.024,.023,.020,.021,.020,.022]}
+  }
+};
+
+let view='monthly', campus='all', activeTab='ops';
+const charts={};
+
+function cl(){return campus==='all'?CAMPUSES:[campus]}
+function sum(a){return a.reduce((s,v)=>s+(v||0),0)}
+function avg(a){const v=a.filter(x=>x!=null);return v.length?v.reduce((s,x)=>s+x,0)/v.length:0}
+function merge(key,sub){return MO.map((_,i)=>cl().reduce((s,c)=>s+(D[sub][c][key][i]||0),0))}
+function mavg(key,sub){return MO.map((_,i)=>avg(cl().map(c=>D[sub][c][key][i])))}
+function pct(v,d=1){return(v*100).toFixed(d)+'%'}
+function fmtN(v){return v==null?'—':v.toLocaleString()}
+function fmtP(v,d=1){return v==null?'—':pct(v,d)}
+function fmtD(v){return v==null?'—':'$'+v.toFixed(2)+'M'}
+function pill(v,tgt,hi=true,fmtFn=v=>v){
+  const good=hi?v>=tgt:v<=tgt;
+  return`<span class="pill ${good?'pg':'pr'}">${fmtFn(v)}</span>`;
+}
+
+function switchTab(t,el){
+  activeTab=t;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.pane').forEach(x=>x.classList.remove('active'));
+  document.getElementById('pane-'+t).classList.add('active');
+  render();
+}
+function setView(v,el){
+  view=v;
+  document.querySelectorAll('.topbar-controls button').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+function render(){
+  campus=document.getElementById('campusSel').value;
+  Object.values(charts).forEach(c=>{try{c.destroy()}catch(e){}});
+  if(activeTab==='ops') renderOps();
+  else if(activeTab==='fin') renderFin();
+  else renderQual();
+}
+
+const baseOpts=(yFmt,yMin)=>({
+  responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+ctx.formattedValue}}},
+  scales:{
+    x:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10},color:'#888',maxRotation:45,autoSkip:false}},
+    y:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10},color:'#888',callback:yFmt?v=>v+yFmt:undefined},min:yMin}
+  }
+});
+
+function mkBar(id,labels,datasets,yFmt,yMin){
+  charts[id]=new Chart(document.getElementById(id),{
+    type:'bar',
+    data:{labels,datasets},
+    options:{...baseOpts(yFmt,yMin),plugins:{legend:{display:false}}}
+  });
+}
+function mkLine(id,labels,datasets,yFmt,yMin){
+  charts[id]=new Chart(document.getElementById(id),{
+    type:'line',
+    data:{labels,datasets},
+    options:{...baseOpts(yFmt,yMin),plugins:{legend:{display:false}}}
+  });
+}
+function mkStacked(id,labels,datasets,yFmt){
+  charts[id]=new Chart(document.getElementById(id),{
+    type:'bar',
+    data:{labels,datasets},
+    options:{...baseOpts(yFmt),scales:{x:{stacked:true,grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10},color:'#888',maxRotation:45,autoSkip:false}},y:{stacked:true,grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{size:10},color:'#888'}}},plugins:{legend:{display:false}}}
+  });
+}
+
+function campusLegend(){
+  return`<div class="legend">${cl().map(c=>`<span class="li"><span class="ls" style="background:${CAMP_COLORS[c]}"></span>${c}</span>`).join('')}</div>`;
+}
+
+// ═══════════ OPERATIONAL ═══════════
+function renderOps(){
+  const volA=merge('vol','ops'), volB=merge('bud','ops');
+  const ytdA=sum(volA), ytdB=sum(volB);
+  const fillA=mavg('fill','ops'), nsA=mavg('ns','ops');
+  const fcotsA=mavg('fcots','ops'), delayA=mavg('delay','ops');
+  const ytdFill=avg(fillA), ytdNs=avg(nsA), ytdFcots=avg(fcotsA), ytdDelay=avg(delayA);
+  const diff=ytdA-ytdB;
+
+  const html=`
+<div class="kpi-row">
+  <div class="kpi"><div class="kpi-label">FYTD Procedures</div><div class="kpi-value">${ytdA.toLocaleString()}</div><div class="kpi-sub ${diff>=0?'up':'dn'}">${diff>=0?'↑':'↓'} ${Math.abs(diff).toLocaleString()} vs budget</div></div>
+  <div class="kpi"><div class="kpi-label">Session Fill Rate</div><div class="kpi-value">${pct(ytdFill)}</div><div class="kpi-sub ${ytdFill>=.90?'up':ytdFill>=.80?'neu':'dn'}">${ytdFill>=.90?'✓ Above':'↓ Below'} 90% target</div></div>
+  <div class="kpi"><div class="kpi-label">Endo No-Show Rate</div><div class="kpi-value">${pct(ytdNs)}</div><div class="kpi-sub ${ytdNs<=.15?'up':ytdNs<=.20?'neu':'dn'}">${ytdNs<=.15?'✓ At target':'↑ Above'} 15% target</div></div>
+  <div class="kpi"><div class="kpi-label">FCOTS Average</div><div class="kpi-value">${pct(ytdFcots)}</div><div class="kpi-sub ${ytdFcots>=.85?'up':ytdFcots>=.78?'neu':'dn'}">${ytdFcots>=.85?'✓ Above':'↓ Below'} 85% target</div></div>
+  <div class="kpi"><div class="kpi-label">Avg Case Delay</div><div class="kpi-value">${ytdDelay.toFixed(0)} min</div><div class="kpi-sub ${ytdDelay<=15?'up':'dn'}">${ytdDelay<=15?'✓ Within':'↑ Above'} 15 min target</div></div>
+</div>
+
+<div class="chart-grid">
+  <div class="card">
+    <div class="card-title">Procedure volume — actual vs budget</div>
+    <div class="card-sub">Monthly total across selected campuses</div>
+    <div class="legend"><span class="li"><span class="ls" style="background:#2E75B6"></span>Actual</span><span class="li"><span class="ls" style="background:#BDD7EE"></span>Budget</span></div>
+    <div style="position:relative;height:200px"><canvas id="oVol"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Session fill rate</div>
+    <div class="card-sub">Monthly % — 90% target shown dashed</div>
+    ${campusLegend()}
+    <div style="position:relative;height:200px"><canvas id="oFill"></canvas></div>
+  </div>
+</div>
+
+<div class="chart-grid">
+  <div class="card">
+    <div class="card-title">Inpatient vs outpatient volume</div>
+    <div class="card-sub">Procedure mix by month</div>
+    <div class="legend"><span class="li"><span class="ls" style="background:#2E75B6"></span>Outpatient</span><span class="li"><span class="ls" style="background:#85B7EB"></span>Inpatient</span></div>
+    <div style="position:relative;height:200px"><canvas id="oIpOp"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Endo no-show rate</div>
+    <div class="card-sub">Monthly % — 15% target shown dashed</div>
+    ${campusLegend()}
+    <div style="position:relative;height:200px"><canvas id="oNs"></canvas></div>
+  </div>
+</div>
+
+<div class="chart-grid">
+  <div class="card">
+    <div class="card-title">First case on-time start (FCOTS)</div>
+    <div class="card-sub">Monthly % — 85% target shown dashed</div>
+    ${campusLegend()}
+    <div style="position:relative;height:180px"><canvas id="oFcots"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Average case delay</div>
+    <div class="card-sub">Minutes per case — 15 min target dashed</div>
+    ${campusLegend()}
+    <div style="position:relative;height:180px"><canvas id="oDelay"></canvas></div>
+  </div>
+</div>
+
+<div class="chart-full card">
+  <div class="card-title">Campus operational scorecard — latest month (May 2026)</div>
+  <div class="card-sub" style="margin-bottom:12px">All metrics · green = at/above target · red = below target</div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Campus</th><th class="num">Volume</th><th class="num">vs Budget</th><th class="num">Fill Rate</th><th class="num">No-Show</th><th class="num">FCOTS</th><th class="num">Delay (min)</th><th class="num">Turnover (min)</th></tr></thead>
+    <tbody id="opsTbl"></tbody>
+  </table></div>
+</div>`;
+
+  document.getElementById('pane-ops').innerHTML=html;
+
+  mkBar('oVol',MO,[
+    {label:'Actual',data:volA,backgroundColor:'#2E75B6',barPercentage:.5,categoryPercentage:.8},
+    {label:'Budget',data:volB,backgroundColor:'#BDD7EE',barPercentage:.5,categoryPercentage:.8}
+  ]);
+  const fillDatasets=[...cl().map(c=>({label:c,data:D.ops[c].fill,borderColor:CAMP_COLORS[c],backgroundColor:'transparent',tension:.3,pointRadius:3,borderWidth:2})),
+    {label:'Target',data:MO.map(()=>.90),borderColor:'#C00000',borderDash:[5,3],pointRadius:0,borderWidth:1.5}];
+  mkLine('oFill',MO,fillDatasets,'%',.2);
+
+  const ipArr=merge('ip','ops'), opArr=merge('op','ops');
+  mkStacked('oIpOp',MO,[
+    {label:'Outpatient',data:opArr,backgroundColor:'#2E75B6'},
+    {label:'Inpatient', data:ipArr,backgroundColor:'#85B7EB'}
+  ]);
+
+  const nsDatasets=[...cl().map(c=>({label:c,data:D.ops[c].ns,borderColor:CAMP_COLORS[c],backgroundColor:'transparent',tension:.3,pointRadius:3,borderWidth:2})),
+    {label:'Target',data:MO.map(()=>.15),borderColor:'#C00000',borderDash:[5,3],pointRadius:0,borderWidth:1.5}];
+  mkLine('oNs',MO,nsDatasets,'%',0);
+
+  const fcotsDS=[...cl().map(c=>({label:c,data:D.ops[c].fcots,borderColor:CAMP_COLORS[c],backgroundColor:'transparent',tension:.3,pointRadius:3,borderWidth:2})),
+    {label:'Target',data:MO.map(()=>.85),borderColor:'#C00000',borderDash:[5,3],pointRadius:0,borderWidth:1.5}];
+  mkLine('oFcots',MO,fcotsDS,'%',.6);
+
+  const delayDS=[...cl().map(c=>({label:c,data:D.ops[c].delay,borderColor:CAMP_COLORS[c],backgroundColor:'transparent',tension:.3,pointRadius:3,borderWidth:2})),
+    {label:'Target',data:MO.map(()=>15),borderColor:'#C00000',borderDash:[5,3],pointRadius:0,borderWidth:1.5}];
+  mkLine('oDelay',MO,delayDS,null,0);
+
+  const tbody=document.getElementById('opsTbl');
+  const lm=10;
+  cl().forEach(c=>{
+    const d=D.ops[c]; const vv=d.vol[lm],vb=d.bud[lm],dif=vv-vb;
+    tbody.innerHTML+=`<tr>
+      <td style="font-weight:600">${c}</td>
+      <td class="num">${fmtN(vv)}</td>
+      <td class="num">${pill(dif,0,true,v=>(v>=0?'+':'')+v)}</td>
+      <td class="num">${pill(d.fill[lm],.90,true,fmtP)}</td>
+      <td class="num">${pill(d.ns[lm],.15,false,fmtP)}</td>
+      <td class="num">${pill(d.fcots[lm],.85,true,fmtP)}</td>
+      <td class="num">${pill(d.delay[lm],15,false,v=>v+' min')}</td>
+      <td class="num">${pill(d.turn[lm],30,false,v=>v+' min')}</td>
+    </tr>`;
+  });
+}
+
+// ═══════════ FINANCIAL ═══════════
+function renderFin(){
+  const salA=merge('salA','fin'), salB=merge('salB','fin');
+  const expA=merge('expA','fin'), expB=merge('expB','fin');
+  const ytdSalA=sum(salA),ytdSalB=sum(salB);
+  const ytdExpA=sum(expA),ytdExpB=sum(expB);
+  const salVar=ytdSalB-ytdSalA, expVar=ytdExpB-ytdExpA;
+  const totalFTE=cl().reduce((s,c)=>s+D.fin[c].fte.f,0);
+  const totalOpen=cl().reduce((s,c)=>s+D.fin[c].fte.o,0);
+  const prodArr=mavg('prod','fin'), ytdProd=avg(prodArr);
+
+  const html=`
+<div class="kpi-row">
+  <div class="kpi fin"><div class="kpi-label">Salary Expense YTD</div><div class="kpi-value">$${ytdSalA.toFixed(1)}M</div><div class="kpi-sub ${salVar>=0?'up':'dn'}">${salVar>=0?'↓ Fav':'↑ Unfav'} $${Math.abs(salVar).toFixed(2)}M vs budget</div></div>
+  <div class="kpi fin"><div class="kpi-label">Non-Salary Expense YTD</div><div class="kpi-value">$${ytdExpA.toFixed(1)}M</div><div class="kpi-sub ${expVar>=0?'up':'dn'}">${expVar>=0?'↓ Fav':'↑ Unfav'} $${Math.abs(expVar).toFixed(2)}M vs budget</div></div>
+  <div class="kpi fin"><div class="kpi-label">FTE Open Positions</div><div class="kpi-value">${totalOpen}</div><div class="kpi-sub ${totalOpen===0?'up':totalOpen<=3?'neu':'dn'}">${totalFTE} filled across selected campuses</div></div>
+  <div class="kpi fin"><div class="kpi-label">Staff Productivity</div><div class="kpi-value">${pct(ytdProd)}</div><div class="kpi-sub ${ytdProd>=.85?'up':ytdProd>=.75?'neu':'dn'}">${ytdProd>=.85?'✓ Above':'↓ Below'} 85% target</div></div>
+</div>
+
+<div class="chart-grid">
+  <div class="card">
+    <div class="card-title">Salary expense — actual vs budget ($M)</div>
+    <div class="card-sub">Monthly across selected campuses</div>
+    <div class="legend"><span class="li"><span class="ls" style="background:#375623"></span>Actual</span><span class="li"><span class="ls" style="background:#C6EFCE"></span>Budget</span></div>
+    <div style="position:relative;height:200px"><canvas id="fSal"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Non-salary expense — actual vs budget ($M)</div>
+    <div class="card-sub">Monthly across selected campuses</div>
+    <div class="legend"><span class="li"><span class="ls" style="background:#C55A11"></span>Actual</span><span class="li"><span class="ls" style="background:#FCE4D6"></span>Budget</span></div>
+    <div style="position:relative;height:200px"><canvas id="fExp"></canvas></div>
+  </div>
+</div>
+
+<div class="chart-grid">
+  <div class="card">
+    <div class="card-title">Salary expense by campus ($M)</div>
+    <div class="card-sub">Monthly trend — all selected campuses</div>
+    ${campusLegend()}
+    <div style="position:relative;height:200px"><canvas id="fSalCamp"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Staff productivity index</div>
+    <div class="card-sub">Monthly % — 85% target shown dashed</div>
+    ${campusLegend()}
+    <div style="position:relative;height:200px"><canvas id="fProd"></canvas></div>
+  </div>
+</div>
+
+<div class="chart-full card">
+  <div class="card-title">Financial scorecard by campus — YTD</div>
+  <div class="card-sub" style="margin-bottom:12px">Salary & non-salary actuals vs budget · FTE status</div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Campus</th><th class="num">Salary YTD</th><th class="num">Sal Budget</th><th class="num">Sal Variance</th><th class="num">Exp YTD</th><th class="num">Exp Budget</th><th class="num">Exp Variance</th><th class="num">FTE Open</th><th class="num">Productivity</th></tr></thead>
+    <tbody id="finTbl"></tbody>
+  </table></div>
+</div>`;
+
+  document.getElementById('pane-fin').innerHTML=html;
+
+  mkBar('fSal',MO,[
+    {label:'Actual',data:salA,backgroundColor:'#375623',barPercentage:.5,categoryPercentage:.8},
+    {label:'Budget',data:salB,backgroundColor:'#C6EFCE',barPercentage:.5,categoryPercentage:.8}
+  ]);
+  mkBar('fExp',MO,[
+    {label:'Actual',data:expA,backgroundColor:'#C55A11',barPercentage:.5,categoryPercentage:.8},
+    {label:'Budget',data:expB,backgroundColor:'#FCE4D6',barPercentage:.5,categoryPercentage:.8}
+  ]);
+  const salCampDS=cl().map(c=>({label:c,data:D.fin[c].salA,borderColor:CAMP_COLORS[c],backgroundColor:'transparent',tension:.3,pointRadius:3,borderWidth:2}));
+  mkLine('fSalCamp',MO,salCampDS,null);
+  const prodDS=[...cl().map(c=>({label:c,data:D.fin[c].prod,borderColor:CAMP_COLORS[c],backgroundColor:'transparent',tension:.3,pointRadius:3,borderWidth:2})),
+    {label:'Target',data:MO.map(()=>.85),borderColor:'#C00000',borderDash:[5,3],pointRadius:0,borderWidth:1.5}];
+  mkLine('fProd',MO,prodDS,'%',.5);
+
+  const tbody=document.getElementById('finTbl');
+  cl().forEach(c=>{
+    const d=D.fin[c];
+    const sa=sum(d.salA),sb=sum(d.salB),sv=sb-sa;
+    const ea=sum(d.expA),eb=sum(d.expB),ev=eb-ea;
+    const pp=avg(d.prod);
+    tbody.innerHTML+=`<tr>
+      <td style="font-weight:600">${c}</td>
+      <td class="num">$${sa.toFixed(2)}M</td>
+      <td class="num">$${sb.toFixed(2)}M</td>
+      <td class="num">${pill(sv,0,true,v=>(v>=0?'+$':'-$')+Math.abs(v).toFixed(2)+'M')}</td>
+      <td class="num">$${ea.toFixed(2)}M</td>
+      <td class="num">$${eb.toFixed(2)}M</td>
+      <td class="num">${pill(ev,0,true,v=>(v>=0?'+$':'-$')+Math.abs(v).toFixed(2)+'M')}</td>
+      <td class="num"><span class="pill ${d.fte.o===0?'pg':d.fte.o<=2?'pa':'pr'}">${d.fte.o} open</span></td>
+      <td class="num">${pill(pp,.85,true,fmtP)}</td>
+    </tr>`;
+  });
+}
+
+// ═══════════ QUALITY ═══════════
+function renderQual(){
+  const cirA=mavg('cir','qual'), adrA=mavg('adr','qual'), readmA=mavg('readm','qual');
+  const ytdCir=avg(cirA), ytdAdr=avg(adrA), ytdReadm=avg(readmA);
+
+  const html=`
+<div class="kpi-row">
+  <div class="kpi qual"><div class="kpi-label">CIR — YTD Average</div><div class="kpi-value">${pct(ytdCir)}</div><div class="kpi-sub ${ytdCir>=.90?'up':'dn'}">${ytdCir>=.90?'✓ Meets':'✗ Below'} ASGE ≥ 90%</div></div>
+  <div class="kpi qual"><div class="kpi-label">ADR — YTD Average</div><div class="kpi-value">${pct(ytdAdr)}</div><div class="kpi-sub ${ytdAdr>=.25?'up':'dn'}">${ytdAdr>=.25?'✓ Meets':'✗ Below'} ASGE ≥ 25%</div></div>
+  <div class="kpi qual"><div class="kpi-label">Readmission Rate</div><div class="kpi-value">${pct(ytdReadm,1)}</div><div class="kpi-sub ${ytdReadm<=.030?'up':'dn'}">${ytdReadm<=.030?'✓ Within':'↑ Above'} 3.0% threshold</div></div>
+  <div class="kpi qual"><div class="kpi-label">Campuses Meeting CIR</div><div class="kpi-value">${CAMPUSES.filter(c=>avg(D.qual[c].cir)>=.90).length} / 5</div><div class="kpi-sub">At or above 90% benchmark</div></div>
+  <div class="kpi qual"><div class="kpi-label">Campuses Meeting ADR</div><div class="kpi-value">${CAMPUSES.filter(c=>avg(D.qual[c].adr)>=.25).length} / 5</div><div class="kpi-sub">At or above 25% benchmark</div></div>
+</div>
+
+<div class="chart-grid">
+  <div class="card">
+    <div class="card-title">Cecal intubation rate (CIR)</div>
+    <div class="card-sub">Monthly % by campus — 90% ASGE benchmark dashed</div>
+    ${campusLegend()}
+    <div style="position:relative;height:210px"><canvas id="qCir"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Adenoma detection rate (ADR)</div>
+    <div class="card-sub">Monthly % by campus — 25% ASGE benchmark dashed</div>
+    ${campusLegend()}
+    <div style="position:relative;height:210px"><canvas id="qAdr"></canvas></div>
+  </div>
+</div>
+
+<div class="chart-full card">
+  <div class="card-title">30-day colonoscopy readmission rate</div>
+  <div class="card-sub" style="margin-bottom:12px">Monthly % by campus — 3.0% threshold dashed</div>
+  ${campusLegend()}
+  <div style="position:relative;height:200px"><canvas id="qReadm"></canvas></div>
+</div>
+
+<div class="chart-full card">
+  <div class="card-title">Quality scorecard by campus — FYTD averages</div>
+  <div class="card-sub" style="margin-bottom:12px">vs ASGE / SDO benchmarks</div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Campus</th><th class="num">CIR avg</th><th class="num">CIR status</th><th class="num">ADR avg</th><th class="num">ADR status</th><th class="num">Readmit avg</th><th class="num">Readmit status</th></tr></thead>
+    <tbody id="qualTbl"></tbody>
+  </table></div>
+  <p class="bench-note">Benchmarks: CIR ≥ 90% · ADR ≥ 25% · Readmission ≤ 3.0% · Source: ASGE Quality Indicators / SDO</p>
+</div>`;
+
+  document.getElementById('pane-qual').innerHTML=html;
+
+  const cirDS=[...cl().map(c=>({label:c,data:D.qual[c].cir,borderColor:CAMP_COLORS[c],backgroundColor:'transparent',tension:.3,pointRadius:3,borderWidth:2})),
+    {label:'Benchmark',data:MO.map(()=>.90),borderColor:'#C00000',borderDash:[5,3],pointRadius:0,borderWidth:1.5}];
+  mkLine('qCir',MO,cirDS,'%',.7);
+  const adrDS=[...cl().map(c=>({label:c,data:D.qual[c].adr,borderColor:CAMP_COLORS[c],backgroundColor:'transparent',tension:.3,pointRadius:3,borderWidth:2})),
+    {label:'Benchmark',data:MO.map(()=>.25),borderColor:'#C00000',borderDash:[5,3],pointRadius:0,borderWidth:1.5}];
+  mkLine('qAdr',MO,adrDS,'%',0);
+  const readmDS=[...cl().map(c=>({label:c,data:D.qual[c].readm,borderColor:CAMP_COLORS[c],backgroundColor:'transparent',tension:.3,pointRadius:3,borderWidth:2})),
+    {label:'Threshold',data:MO.map(()=>.030),borderColor:'#C00000',borderDash:[5,3],pointRadius:0,borderWidth:1.5}];
+  mkLine('qReadm',MO,readmDS,'%',0);
+
+  const tbody=document.getElementById('qualTbl');
+  cl().forEach(c=>{
+    const d=D.qual[c];
+    const ci=avg(d.cir),ad=avg(d.adr),rm=avg(d.readm);
+    tbody.innerHTML+=`<tr>
+      <td style="font-weight:600">${c}</td>
+      <td class="num">${pct(ci)}</td>
+      <td>${pill(ci,.90,true,v=>(v>=.90?'✓ Meets':'✗ Below benchmark'))}</td>
+      <td class="num">${pct(ad)}</td>
+      <td>${pill(ad,.25,true,v=>(v>=.25?'✓ Meets':'✗ Below benchmark'))}</td>
+      <td class="num">${pct(rm,1)}</td>
+      <td>${pill(rm,.030,false,v=>(v<=.030?'✓ Within threshold':'✗ Above threshold'))}</td>
+    </tr>`;
+  });
+}
+
+render();
+</script>
+</body>
+</html>
